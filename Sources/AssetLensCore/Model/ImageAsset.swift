@@ -7,7 +7,8 @@
 
 import Foundation
 
-public struct ImageAsset {
+public struct ImageAsset: Identifiable {
+    public let id = UUID()
     public let url: URL
     public var isUsed: Bool?
     
@@ -61,6 +62,11 @@ public struct ImageAsset {
         return url.lastPathComponent
     }
     
+    public init(url: URL, isUsed: Bool? = nil) {
+        self.url = url
+        self.isUsed = isUsed
+    }
+    
     /// Check if two assets are from the same imageset
     public func isInSameImageset(as other: ImageAsset) -> Bool {
         guard let thisImageset = self.imagesetName,
@@ -74,10 +80,10 @@ public struct ImageAsset {
 // Make ImageAsset Hashable for Set operations
 extension ImageAsset: Hashable {
     public static func == (lhs: ImageAsset, rhs: ImageAsset) -> Bool {
-        lhs.url == rhs.url
+        lhs.id == rhs.id
     }
     
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(url)
+        hasher.combine(id)
     }
 }
