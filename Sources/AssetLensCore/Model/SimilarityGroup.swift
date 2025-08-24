@@ -7,9 +7,13 @@
 
 import Foundation
 
-public struct SimilarityGroup: Sendable {
+public struct SimilarityGroup: Sendable, Identifiable {
     public var primary: ImageAsset
     public var similar: [(ImageAsset, Float)]
+    
+    public var id: UUID {
+        primary.id
+    }
     
     public init(primary: ImageAsset, similar: [(ImageAsset, Float)]) {
         self.primary = primary
