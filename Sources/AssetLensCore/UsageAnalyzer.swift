@@ -7,10 +7,10 @@
 
 import Foundation
 
-public class UsageAnalyzer { // TODO: make async
+public struct UsageAnalyzer {
     public init() {}
     
-    public func findUnusedAssets(assets: [ImageAsset], in projectURL: URL, verbosity: VerbosityLevel) -> Set<ImageAsset> {
+    public func findUnusedAssets(assets: [ImageAsset], in projectURL: URL, verbosity: VerbosityLevel) async -> Set<ImageAsset> {
         guard !assets.isEmpty else { return [] }
         
         if verbosity >= .verbose {
@@ -41,7 +41,7 @@ public class UsageAnalyzer { // TODO: make async
                     -rhoI -E '\(pattern)' '\(projectPath)' | sort -u
                     """
         
-        let result = execute(command)
+        let result = await execute(command)
         
         // Parse the output to get used asset names
         var usedNames: [String] = []
@@ -64,27 +64,32 @@ public class UsageAnalyzer { // TODO: make async
     }
     
     @discardableResult
-    private func execute(_ command: String) -> Result<CommandResult, Error> {
-        let task = Process()
-        let pipe = Pipe()
-        
-        task.standardOutput = pipe
-        task.standardError = Pipe()  // discard stderr
-        task.arguments = ["-c", command]
-        task.launchPath = "/bin/bash"
-        task.standardInput = nil
-        
-        do {
-            try task.run()
-            task.waitUntilExit()
-            
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            
-            return .success(.init(output: output, exitCode: task.terminationStatus))
-        } catch {
-            return .failure(error)
+    private func execute(_ command: String) async -> Result<CommandResult, Error> {
+        return await withCheckedContinuation { continuation in
+            Task.detached {
+                let process = Process()
+                let pipe = Pipe()
+                
+                process.standardOutput = pipe
+                process.standardError = Pipe()  // discard stderr
+                process.arguments = ["-c", command]
+                process.launchPath = "/bin/bash"
+                process.standardInput = nil
+                
+                do {
+                    try process.run()
+                    
+                    process.waitUntilExit()
+                    
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(data: data, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    
+                    continuation.resume(returning: .success(.init(output: output, exitCode: process.terminationStatus)))
+                } catch {
+                    continuation.resume(returning: .failure(error))
+                }
+            }
         }
     }
 }

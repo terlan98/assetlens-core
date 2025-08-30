@@ -10,6 +10,8 @@ import Vision
 import AppKit
 
 public class SimilarityAnalyzer {
+    public typealias ProgressCallback = (Double) -> Void
+    
     let threshold: Float
     private var featurePrintCache: [URL: VNFeaturePrintObservation] = [:]
     
@@ -17,7 +19,7 @@ public class SimilarityAnalyzer {
         self.threshold = threshold
     }
     
-    public func findSimilarGroups(in assets: [ImageAsset], verbosity: VerbosityLevel) throws -> [SimilarityGroup] {
+    public func findSimilarGroups(in assets: [ImageAsset], verbosity: VerbosityLevel, progressCallback: ProgressCallback? = nil) throws -> [SimilarityGroup] {
         var groups: [SimilarityGroup] = []
         var processedAssets = Set<URL>()
         
@@ -32,10 +34,15 @@ public class SimilarityAnalyzer {
             if verbosity >= .verbose && index % 10 == 0 {
                 print("Processing \(index)/\(assets.count) assets...")
             }
-            if let _ = try getFeaturePrint(for: asset) {
-                validAssets.append(asset)
-            } else if verbosity == .debug {
-                print("⚠️ Could not generate feature print for: \(asset.displayName)")
+            
+            do {
+                if try getFeaturePrint(for: asset) != nil {
+                    validAssets.append(asset)
+                } else {
+                    print("⚠️ Could not generate feature print for: \(asset.displayName)")
+                }
+            } catch {
+                print("⚠️ Could not generate feature print for: \(asset.displayName): \(error)")
             }
         }
         
@@ -49,8 +56,14 @@ public class SimilarityAnalyzer {
             print("---")
         }
         
-        // Dind similar groups
+        // Find similar groups
         for (index, asset) in validAssets.enumerated() {
+            defer {
+                if let progressCallback {
+                    progressCallback(Double(processedAssets.count) / Double(validAssets.count))
+                }
+            }
+            
             // Skip if already part of a group
             guard !processedAssets.contains(asset.url) else { continue }
             
