@@ -11,6 +11,7 @@ public struct ImageAsset: Identifiable {
     public let id = UUID()
     public let url: URL
     public var isUsed: Bool?
+    public var isDeleted: Bool = false
     
     public var fileSize: Int64 {
         (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
