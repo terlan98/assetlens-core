@@ -10,7 +10,7 @@ import Vision
 import AppKit
 
 public class SimilarityAnalyzer {
-    public typealias ProgressCallback = (Double) -> Void
+    public typealias ProgressCallback = @Sendable (Double) -> Void
     
     let threshold: Float
     let verbosity: VerbosityLevel

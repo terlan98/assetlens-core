@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct ImageAsset: Identifiable {
+public struct ImageAsset: Identifiable, Sendable {
     public let id = UUID()
     public let url: URL
     public var isUsed: Bool?

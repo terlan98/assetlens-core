@@ -6,13 +6,25 @@
 //
 
 import Foundation
-
 public struct AssetScanner {
     let supportedExtensions = ["png", "jpg", "jpeg", "pdf", "svg"]
     
     public init() {}
     
-    public func scanDirectory(at url: URL, minSizeKB: Int) throws -> [ImageAsset] {
+    public func scanDirectory(at url: URL, minSizeKB: Int) async throws -> [ImageAsset] {
+        try await withCheckedThrowingContinuation { continuation in
+            Task.detached {
+                do {
+                    let assets = try self.performScan(at: url, minSizeKB: minSizeKB)
+                    continuation.resume(returning: assets)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    private func performScan(at url: URL, minSizeKB: Int) throws -> [ImageAsset] {
         var assets: [ImageAsset] = []
         let fileManager = FileManager.default
         
@@ -44,7 +56,7 @@ public struct AssetScanner {
             let asset = ImageAsset(url: fileURL)
             
             // Check if we already have an asset from this imageset
-            let alreadyHasAssetFromSameImageset = assets.contains {  $0.relativePath == asset.relativePath }
+            let alreadyHasAssetFromSameImageset = assets.contains { $0.relativePath == asset.relativePath }
             
             if !alreadyHasAssetFromSameImageset {
                 assets.append(asset)
