@@ -13,13 +13,16 @@ public class SimilarityAnalyzer {
     public typealias ProgressCallback = (Double) -> Void
     
     let threshold: Float
-    private var featurePrintCache: [URL: VNFeaturePrintObservation] = [:]
+    let verbosity: VerbosityLevel
     
-    public init(threshold: Float) {
+    private var featurePrintCache = FeaturePrintCache()
+    
+    public init(threshold: Float, verbosity: VerbosityLevel = .normal) {
         self.threshold = threshold
+        self.verbosity = verbosity
     }
     
-    public func findSimilarGroups(in assets: [ImageAsset], verbosity: VerbosityLevel, progressCallback: ProgressCallback? = nil) throws -> [SimilarityGroup] {
+    public func findSimilarGroups(in assets: [ImageAsset], progressCallback: ProgressCallback? = nil) async throws -> [SimilarityGroup] {
         var groups: [SimilarityGroup] = []
         var processedAssets = Set<URL>()
         
@@ -29,22 +32,7 @@ public class SimilarityAnalyzer {
         }
         
         // Pre-generate all feature prints and filter valid assets
-        var validAssets: [ImageAsset] = []
-        for (index, asset) in assets.enumerated() {
-            if verbosity >= .verbose && index % 10 == 0 {
-                print("Processing \(index)/\(assets.count) assets...")
-            }
-            
-            do {
-                if try getFeaturePrint(for: asset) != nil {
-                    validAssets.append(asset)
-                } else {
-                    print("⚠️ Could not generate feature print for: \(asset.displayName)")
-                }
-            } catch {
-                print("⚠️ Could not generate feature print for: \(asset.displayName): \(error)")
-            }
-        }
+        var validAssets = await preGenerateFeaturePrints(for: assets)
         
         if verbosity >= .verbose {
             print("Analyzing similarities for \(validAssets.count) valid assets...")
@@ -67,14 +55,14 @@ public class SimilarityAnalyzer {
             // Skip if already part of a group
             guard !processedAssets.contains(asset.url) else { continue }
             
-            guard let print1 = try getFeaturePrint(for: asset) else { continue }
+            guard let print1 = try await getFeaturePrint(for: asset) else { continue }
             
             var similarAssets: [(ImageAsset, Float)] = []
             
             // Compare with remaining unprocessed assets
             for otherAsset in validAssets.dropFirst(index + 1) {
                 guard !processedAssets.contains(otherAsset.url),
-                      let print2 = try getFeaturePrint(for: otherAsset) else { continue }
+                      let print2 = try await getFeaturePrint(for: otherAsset) else { continue }
                 
                 // Skip if they're from the same imageset (e.g., @1x, @2x, @3x versions)
                 if asset.isInSameImageset(as: otherAsset) {
@@ -126,8 +114,33 @@ public class SimilarityAnalyzer {
         return groups
     }
     
-    private func getFeaturePrint(for asset: ImageAsset) throws -> VNFeaturePrintObservation? {
-        if let cached = featurePrintCache[asset.url] {
+    
+    /// Computes feature prints for given assets. The results are cached in a `FeaturePrintCache` instance
+    /// - Returns: assets with valid feature prints
+    private func preGenerateFeaturePrints(for assets: [ImageAsset]) async -> [ImageAsset] {
+        var validAssets: [ImageAsset] = []
+        
+        for (index, asset) in assets.enumerated() {
+            if verbosity >= .verbose && index % 10 == 0 {
+                print("Processing \(index)/\(assets.count) assets...")
+            }
+            
+            do {
+                if try await getFeaturePrint(for: asset) != nil {
+                    validAssets.append(asset)
+                } else {
+                    print("⚠️ Could not generate feature print for: \(asset.displayName)")
+                }
+            } catch {
+                print("⚠️ Could not generate feature print for: \(asset.displayName): \(error)")
+            }
+        }
+        
+        return validAssets
+    }
+    
+    private func getFeaturePrint(for asset: ImageAsset) async throws -> VNFeaturePrintObservation? {
+        if let cached = await featurePrintCache.get(for: asset.url) {
             return cached
         }
         
@@ -145,7 +158,21 @@ public class SimilarityAnalyzer {
             return nil
         }
         
-        featurePrintCache[asset.url] = observation
+        await featurePrintCache.set(observation, for: asset.url)
         return observation
+    }
+}
+
+extension SimilarityAnalyzer {
+    private actor FeaturePrintCache {
+        private var cache: [URL: VNFeaturePrintObservation] = [:]
+        
+        func get(for url: URL) -> VNFeaturePrintObservation? {
+            return cache[url]
+        }
+        
+        func set(_ observation: VNFeaturePrintObservation, for url: URL) {
+            cache[url] = observation
+        }
     }
 }
