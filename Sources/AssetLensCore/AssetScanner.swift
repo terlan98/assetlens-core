@@ -65,7 +65,7 @@ public struct AssetScanner {
                 directorySize = calculateDirectorySize(at: imagesetURL)
                 imagesetSizes[imagesetPath] = directorySize
                 
-                var asset = ImageAsset(url: fileURL, imageSetSize: directorySize)
+                let asset = ImageAsset(url: fileURL, imageSetSize: directorySize)
                 assets.append(asset)
             }
         }

@@ -32,7 +32,7 @@ public class SimilarityAnalyzer {
         }
         
         // Pre-generate all feature prints and filter valid assets
-        var validAssets = await preGenerateFeaturePrints(for: assets)
+        let validAssets = await preGenerateFeaturePrints(for: assets)
         
         if verbosity >= .verbose {
             print("Analyzing similarities for \(validAssets.count) valid assets...")
