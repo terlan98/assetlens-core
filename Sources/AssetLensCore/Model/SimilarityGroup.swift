@@ -29,15 +29,15 @@ public struct SimilarityGroup: Sendable, Identifiable {
         allAssets.filter { $0.isUsed == false }
     }
     
-    public var totalSize: Int64 {
-        allAssets.reduce(0) { $0 + $1.fileSize }
+    public var totalSize: Int {
+        allAssets.reduce(0) { $0 + $1.imageSetSize }
     }
     
-    public var potentialSavings: Int64 {
+    public var potentialSavings: Int {
         if allAssets.allSatisfy({ $0.isUsed == false }) {
             return totalSize
         } else {
-            let smallestAssetSize = allAssets.map { $0.fileSize }.min() ?? 0
+            let smallestAssetSize = allAssets.map { $0.imageSetSize }.min() ?? 0
             return totalSize - smallestAssetSize
         }
     }

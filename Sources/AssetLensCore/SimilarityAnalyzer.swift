@@ -65,7 +65,7 @@ public class SimilarityAnalyzer {
                       let print2 = try await getFeaturePrint(for: otherAsset) else { continue }
                 
                 // Skip if they're from the same imageset (e.g., @1x, @2x, @3x versions)
-                if asset.isInSameImageset(as: otherAsset) {
+                if asset.isInSameImageSet(as: otherAsset) {
                     continue
                 }
                 

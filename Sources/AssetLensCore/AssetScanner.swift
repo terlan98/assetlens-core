@@ -26,6 +26,7 @@ public struct AssetScanner {
     
     private func performScan(at url: URL, minSizeKB: Int) throws -> [ImageAsset] {
         var assets: [ImageAsset] = []
+        var imagesetSizes: [String: Int] = [:]
         let fileManager = FileManager.default
         
         guard let enumerator = fileManager.enumerator(
@@ -37,32 +38,59 @@ public struct AssetScanner {
         }
         
         for case let fileURL as URL in enumerator {
-            // Only process files inside .imageset directories
-            guard fileURL.path.contains(".imageset/") else {
-                continue
-            }
-            
-            // Skip non-image files
-            guard supportedExtensions.contains(fileURL.pathExtension.lowercased()) else {
+            // Only process image files inside .imageset directories
+            guard fileURL.path.contains(".imageset/"),
+                  supportedExtensions.contains(fileURL.pathExtension.lowercased()) else {
                 continue
             }
             
             // Check file size
-            if let fileSize = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-               fileSize < minSizeKB * 1024 {
+            guard let fileSize = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                  fileSize >= minSizeKB * 1024 else {
                 continue
             }
             
-            let asset = ImageAsset(url: fileURL)
-            
-            // Check if we already have an asset from this imageset
-            let alreadyHasAssetFromSameImageset = assets.contains { $0.relativePath == asset.relativePath }
-            
-            if !alreadyHasAssetFromSameImageset {
+            // Get imageset directory size
+            let pathComponents = fileURL.pathComponents
+            if let imagesetIndex = pathComponents.firstIndex(where: { $0.hasSuffix(".imageset") }) {
+                let imagesetPath = pathComponents[0...imagesetIndex].joined(separator: "/")
+                let directorySize: Int
+                
+                guard imagesetSizes[imagesetPath] == nil else {
+                    continue // Cache hit; Skip already processed set
+                }
+                
+                // Cache miss
+                let imagesetURL = URL(filePath: imagesetPath)
+                directorySize = calculateDirectorySize(at: imagesetURL)
+                imagesetSizes[imagesetPath] = directorySize
+                
+                var asset = ImageAsset(url: fileURL, imageSetSize: directorySize)
                 assets.append(asset)
             }
         }
         
         return assets
+    }
+    
+    private func calculateDirectorySize(at url: URL) -> Int {
+        let fileManager = FileManager.default
+        var totalSize = 0
+        
+        guard let enumerator = fileManager.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return 0
+        }
+        
+        for case let fileURL as URL in enumerator {
+            if let fileSize = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                totalSize += fileSize
+            }
+        }
+        
+        return totalSize
     }
 }

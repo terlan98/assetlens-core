@@ -7,7 +7,7 @@
 
 import Foundation
 
-public extension Int64 {
+public extension Int {
     public func formattedAsBytes() -> String {
         self.formatted(.byteCount(style: .file))
     }
