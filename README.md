@@ -1,3 +1,5 @@
+<img src="icon.png" height="50em">
+
 # AssetLensCore
 
 A Swift Package for finding visually similar assets in Xcode projects. 📱✨
