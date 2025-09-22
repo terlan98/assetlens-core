@@ -47,38 +47,10 @@ public struct UsageAnalyzer {
         var usedNames: Set<String> = []
         
         // Parse name search
-        switch nameSearchResult {
-        case .success(let commandResult):
-            usedNames.formUnion(
-                Set(
-                    commandResult.output
-                        .split(separator: "\n")
-                        .map { String($0) }
-                        .filter { !$0.isEmpty }
-                )
-            )
-        case .failure(let error):
-            if verbosity >= .debug {
-                print("Error during shell command execution: \(error)")
-            }
-        }
+        usedNames.formUnion(getNames(from: nameSearchResult))
         
         // Parse image resource search
-        switch imageResourceNameSearchResult {
-        case .success(let commandResult):
-            usedNames.formUnion(
-                Set(
-                    commandResult.output
-                        .split(separator: "\n")
-                        .map { String($0) }
-                        .filter { !$0.isEmpty }
-                )
-            )
-        case .failure(let error):
-            if verbosity >= .debug {
-                print("Error during shell command execution: \(error)")
-            }
-        }
+        usedNames.formUnion(getNames(from: imageResourceNameSearchResult))
         
         let unusedAssets = assets.filter { asset in
             let isNotUsedAsStringLiteral = !usedNames.contains(asset.displayName)
@@ -151,6 +123,21 @@ public struct UsageAnalyzer {
                     continuation.resume(returning: .failure(error))
                 }
             }
+        }
+    }
+    
+    private func getNames(from result: Result<CommandResult, Error>) -> Set<String> {
+        switch result {
+        case .success(let commandResult):
+            return Set(
+                commandResult.output
+                    .split(separator: "\n")
+                    .map { String($0) }
+                    .filter { !$0.isEmpty }
+            )
+        case .failure(let error):
+            print("Error during shell command execution: \(error)")
+            return []
         }
     }
 }
