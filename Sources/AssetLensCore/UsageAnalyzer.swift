@@ -25,7 +25,7 @@ public struct UsageAnalyzer {
         var nameToImageResourceName = imageResourceNames(for: names)
         
         // MARK: - Search by name
-        let escapedNames = names.map { NSRegularExpression.escapedPattern(for: "\"\($0)\"") }
+        let escapedNames = names.map { NSRegularExpression.escapedPattern(for: prepareStringForNameSearch($0)) }
         let escapedNamesSearchPattern = escapedNames.joined(separator: "|")
         
         if verbosity == .debug {
@@ -55,7 +55,7 @@ public struct UsageAnalyzer {
         
         // MARK: - Final result based on all searches
         let unusedAssets = assets.filter { asset in
-            let isNotUsedAsStringLiteral = !usedNames.contains("\"\(asset.displayName)\"")
+            let isNotUsedAsStringLiteral = !usedNames.contains(prepareStringForNameSearch(asset.displayName))
             let isNotUsedAsImageResource = !usedNames.contains { $0.lowercased() == nameToImageResourceName[asset.displayName]?.lowercased() }
             
             return isNotUsedAsStringLiteral && isNotUsedAsImageResource
@@ -126,6 +126,10 @@ public struct UsageAnalyzer {
                 }
             }
         }
+    }
+    
+    private func prepareStringForNameSearch(_ string: String) -> String {
+        "\"" + string + "\""
     }
     
     private func getNames(from result: Result<CommandResult, Error>) -> Set<String> {
