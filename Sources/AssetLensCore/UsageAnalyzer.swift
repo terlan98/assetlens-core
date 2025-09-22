@@ -20,14 +20,95 @@ public struct UsageAnalyzer {
         let assets = Set(assets)
         let projectPath = projectURL.path
         
-        let escapedNames = assets.map { NSRegularExpression.escapedPattern(for: $0.displayName) }
-        let pattern = escapedNames.joined(separator: "|")
+        let names = assets.map(\.displayName)
+        let nameToImageResourceName = imageResourceNames(for: names)
+        
+        let escapedNames = names.map { NSRegularExpression.escapedPattern(for: $0) }
+        let escapedNamesSearchPattern = escapedNames.joined(separator: "|")
+        
+        let escapedImageResourceNames = Array(nameToImageResourceName.values)
+            .compactMap { $0 }
+            .map { "(?i)" + NSRegularExpression.escapedPattern(for: $0) } // (?i) for case insensitivity
+        let escapedImageResourceNamesSearchPattern = escapedImageResourceNames.joined(separator: "|")
         
         if verbosity == .debug {
             print("Searching for \(assets.count) asset names in project files...")
-            print("Search pattern length: \(pattern.count) characters")
+            print("Search pattern length for names: \(escapedNamesSearchPattern.count) characters")
+            print("Search pattern length for resource names: \(escapedImageResourceNamesSearchPattern.count) characters")
         }
         
+        let nameSearchResult = await search(at: projectPath, for: escapedNamesSearchPattern)
+        
+        // TODO: Tarlan - Optimization: if a usage is found for an asset at this step, do not pass it to the next resource search
+        
+        let imageResourceNameSearchResult = await search(at: projectPath, for: escapedImageResourceNamesSearchPattern)
+        
+        // Parse the output to get used asset names
+        var usedNames: Set<String> = []
+        
+        // Parse name search
+        switch nameSearchResult {
+        case .success(let commandResult):
+            usedNames.formUnion(
+                Set(
+                    commandResult.output
+                        .split(separator: "\n")
+                        .map { String($0) }
+                        .filter { !$0.isEmpty }
+                )
+            )
+        case .failure(let error):
+            if verbosity >= .debug {
+                print("Error during shell command execution: \(error)")
+            }
+        }
+        
+        // Parse image resource search
+        switch imageResourceNameSearchResult {
+        case .success(let commandResult):
+            usedNames.formUnion(
+                Set(
+                    commandResult.output
+                        .split(separator: "\n")
+                        .map { String($0) }
+                        .filter { !$0.isEmpty }
+                )
+            )
+        case .failure(let error):
+            if verbosity >= .debug {
+                print("Error during shell command execution: \(error)")
+            }
+        }
+        
+        let unusedAssets = assets.filter { asset in
+            let isNotUsedAsStringLiteral = !usedNames.contains(asset.displayName)
+            let isNotUsedAsImageResource = !usedNames.contains { $0.lowercased() == nameToImageResourceName[asset.displayName]?.lowercased() }
+            
+            return isNotUsedAsStringLiteral && isNotUsedAsImageResource
+        }
+        
+        return unusedAssets
+    }
+    
+    /// Maps the given array of asset names to possible image resource names
+    private func imageResourceNames(for assetNames: [String]) -> [String: String] {
+        let allowedCharacters = CharacterSet.alphanumerics
+        var assetNameToImageResourceName: [String: String] = [:]
+        
+        assetNames.forEach { name in
+            let transformedName = name.unicodeScalars
+                .compactMap { allowedCharacters.contains($0) ? String($0) : nil }
+                .joined()
+            
+            if !transformedName.isEmpty && transformedName != name {
+                assetNameToImageResourceName[name] = transformedName
+            }
+        }
+        
+        return assetNameToImageResourceName
+    }
+    
+    private func search(at path: String, for pattern: String) async -> Result<CommandResult, Error> {
         // -r: recursive
         // -h: no filenames
         // -o: only matches
@@ -38,32 +119,12 @@ public struct UsageAnalyzer {
                     --include="*.storyboard" --include="*.xib" --include="*.plist" \
                     --exclude-dir=".git" --exclude-dir="Build" \
                     --exclude-dir="Pods" --exclude-dir="Carthage" \
-                    -rhoI -E '\(pattern)' '\(projectPath)' | sort -u
+                    -rhoI -E '\(pattern)' '\(path)' | sort -u
                     """
         
-        let result = await execute(command)
-        
-        // Parse the output to get used asset names
-        var usedNames: [String] = []
-        
-        switch result {
-        case .success(let commandResult):
-            usedNames = commandResult.output
-                .split(separator: "\n")
-                .map { String($0) }
-                .filter { !$0.isEmpty }
-        case .failure(let error):
-            if verbosity >= .debug {
-                print("Error during shell command execution: \(error)")
-            }
-        }
-        
-        let unusedAssets = assets.filter { !usedNames.contains($0.displayName) }
-        
-        return unusedAssets
+        return await execute(command)
     }
     
-    @discardableResult
     private func execute(_ command: String) async -> Result<CommandResult, Error> {
         return await withCheckedContinuation { continuation in
             Task.detached {
