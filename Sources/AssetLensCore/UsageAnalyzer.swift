@@ -19,12 +19,27 @@ public struct UsageAnalyzer {
         
         let assets = Set(assets)
         let projectPath = projectURL.path
+        var usedNames: Set<String> = []
         
         let names = assets.map(\.displayName)
-        let nameToImageResourceName = imageResourceNames(for: names)
+        var nameToImageResourceName = imageResourceNames(for: names)
         
-        let escapedNames = names.map { NSRegularExpression.escapedPattern(for: $0) }
+        // MARK: - Search by name
+        let escapedNames = names.map { NSRegularExpression.escapedPattern(for: "\"\($0)\"") }
         let escapedNamesSearchPattern = escapedNames.joined(separator: "|")
+        
+        if verbosity == .debug {
+            print("Searching for \(assets.count) asset names in project files...")
+            print("Search pattern length for names: \(escapedNamesSearchPattern.count) characters")
+        }
+        
+        let nameSearchResult = await search(at: projectPath, for: escapedNamesSearchPattern)
+        usedNames.formUnion(getNames(from: nameSearchResult))
+        
+        // MARK: - Search by image resource name
+        usedNames.forEach { usedName in // remove already found assets' names for optimizing the search
+            nameToImageResourceName.removeValue(forKey: usedName)
+        }
         
         let escapedImageResourceNames = Array(nameToImageResourceName.values)
             .compactMap { $0 }
@@ -32,28 +47,15 @@ public struct UsageAnalyzer {
         let escapedImageResourceNamesSearchPattern = escapedImageResourceNames.joined(separator: "|")
         
         if verbosity == .debug {
-            print("Searching for \(assets.count) asset names in project files...")
-            print("Search pattern length for names: \(escapedNamesSearchPattern.count) characters")
             print("Search pattern length for resource names: \(escapedImageResourceNamesSearchPattern.count) characters")
         }
         
-        let nameSearchResult = await search(at: projectPath, for: escapedNamesSearchPattern)
-        
-        // TODO: Tarlan - Optimization: if a usage is found for an asset at this step, do not pass it to the next resource search
-        
         let imageResourceNameSearchResult = await search(at: projectPath, for: escapedImageResourceNamesSearchPattern)
-        
-        // Parse the output to get used asset names
-        var usedNames: Set<String> = []
-        
-        // Parse name search
-        usedNames.formUnion(getNames(from: nameSearchResult))
-        
-        // Parse image resource search
         usedNames.formUnion(getNames(from: imageResourceNameSearchResult))
         
+        // MARK: - Final result based on all searches
         let unusedAssets = assets.filter { asset in
-            let isNotUsedAsStringLiteral = !usedNames.contains(asset.displayName)
+            let isNotUsedAsStringLiteral = !usedNames.contains("\"\(asset.displayName)\"")
             let isNotUsedAsImageResource = !usedNames.contains { $0.lowercased() == nameToImageResourceName[asset.displayName]?.lowercased() }
             
             return isNotUsedAsStringLiteral && isNotUsedAsImageResource
