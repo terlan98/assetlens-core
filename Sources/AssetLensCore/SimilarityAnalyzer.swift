@@ -144,13 +144,12 @@ public class SimilarityAnalyzer {
             return cached
         }
         
-        guard let image = NSImage(contentsOf: asset.url),
-              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        guard let cgImage = getCGImage(for: asset) else {
             return nil
         }
         
         let request = VNGenerateImageFeaturePrintRequest()
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        let handler = VNImageRequestHandler(cgImage: cgImage)
         
         try handler.perform([request])
         
@@ -160,6 +159,16 @@ public class SimilarityAnalyzer {
         
         await featurePrintCache.set(observation, for: asset.url)
         return observation
+    }
+    
+    private func getCGImage(for asset: ImageAsset) -> CGImage? {
+        guard let image = NSImage(contentsOf: asset.url) else { return nil }
+        
+        if image.hasTransparency {
+            return image.rasterizedCGImageWithOutline(size: .init(width: 128, height: 128))
+        } else {
+            return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        }
     }
 }
 
